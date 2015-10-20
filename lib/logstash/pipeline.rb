@@ -1,6 +1,7 @@
 # encoding: utf-8
-require "thread" #
+require "thread"
 require "stud/interval"
+require "concurrent"
 require "logstash/namespace"
 require "logstash/errors"
 require "logstash/event"
@@ -8,17 +9,25 @@ require "logstash/config/file"
 require "logstash/filters/base"
 require "logstash/inputs/base"
 require "logstash/outputs/base"
+require "logstash/util/reporter"
+require "logstash/config/cpu_core_strategy"
+require "logstash/util/defaults_printer"
 
 class LogStash::Pipeline
+  attr_reader :inputs, :filters, :outputs, :input_to_filter, :filter_to_output
 
   def initialize(configstr)
     @logger = Cabin::Channel.get(LogStash)
+
+    @inputs = nil
+    @filters = nil
+    @outputs = nil
+
     grammar = LogStashConfigParser.new
     @config = grammar.parse(configstr)
     if @config.nil?
       raise LogStash::ConfigurationError, grammar.failure_reason
     end
-
     # This will compile the config to ruby and evaluate the resulting code.
     # The code will initialize all the plugins and define the
     # filter and output methods.
@@ -33,36 +42,27 @@ class LogStash::Pipeline
     end
 
     @input_to_filter = SizedQueue.new(20)
+    # if no filters, pipe inputs directly to outputs
+    @filter_to_output = filters? ? SizedQueue.new(20) : @input_to_filter
 
-    # If no filters, pipe inputs directly to outputs
-    if !filters?
-      @filter_to_output = @input_to_filter
-    else
-      @filter_to_output = SizedQueue.new(20)
-    end
     @settings = {
-      "filter-workers" => 1,
+      "filter-workers" => LogStash::Config::CpuCoreStrategy.fifty_percent
     }
 
-    @run_mutex = Mutex.new
-    @ready = false
-    @started = false
+    # @ready requires thread safety since it is typically polled from outside the pipeline thread
+    @ready = Concurrent::AtomicBoolean.new(false)
     @input_threads = []
   end # def initialize
 
   def ready?
-    @run_mutex.synchronize{@ready}
-  end
-
-  def started?
-    @run_mutex.synchronize{@started}
+    @ready.value
   end
 
   def configure(setting, value)
-    if setting == "filter-workers"
+    if setting == "filter-workers" && value > 1
       # Abort if we have any filters that aren't threadsafe
-      if value > 1 && @filters.any? { |f| !f.threadsafe? }
-        plugins = @filters.select { |f| !f.threadsafe? }.collect { |f| f.class.config_name }
+      plugins = @filters.select { |f| !f.threadsafe? }.collect { |f| f.class.config_name }
+      if !plugins.size.zero?
         raise LogStash::ConfigurationError, "Cannot use more than 1 filter worker because the following plugins don't work with more than one worker: #{plugins.join(", ")}"
       end
     end
@@ -74,14 +74,17 @@ class LogStash::Pipeline
   end
 
   def run
-    @run_mutex.synchronize{@started = true}
+    @logger.terminal(LogStash::Util::DefaultsPrinter.print(@settings))
 
-    # synchronize @input_threads between run and shutdown
-    @run_mutex.synchronize{start_inputs}
-    start_filters if filters?
-    start_outputs
-
-    @run_mutex.synchronize{@ready = true}
+    begin
+      start_inputs
+      start_filters if filters?
+      start_outputs
+    ensure
+      # it is important to garantee @ready to be true after the startup sequence has been completed
+      # to potentially unblock the shutdown method which may be waiting on @ready to proceed
+      @ready.make_true
+    end
 
     @logger.info("Pipeline started")
     @logger.terminal("Logstash startup completed")
@@ -106,16 +109,10 @@ class LogStash::Pipeline
 
   def wait_inputs
     @input_threads.each(&:join)
-  rescue Interrupt
-    # rbx does weird things during do SIGINT that I haven't debugged
-    # so we catch Interrupt here and signal a shutdown. For some reason the
-    # signal handler isn't invoked it seems? I dunno, haven't looked much into
-    # it.
-    shutdown
   end
 
   def shutdown_filters
-    @flusher_lock.synchronize { @flusher_thread.kill }
+    @flusher_thread.kill
     @input_to_filter.push(LogStash::SHUTDOWN)
   end
 
@@ -152,12 +149,18 @@ class LogStash::Pipeline
 
   def start_filters
     @filters.each(&:register)
-    @filter_threads = @settings["filter-workers"].times.collect do
+    to_start = @settings["filter-workers"]
+    @filter_threads = to_start.times.collect do
       Thread.new { filterworker }
     end
-
-    @flusher_lock = Mutex.new
-    @flusher_thread = Thread.new { Stud.interval(5) { @flusher_lock.synchronize { @input_to_filter.push(LogStash::FLUSH) } } }
+    actually_started = @filter_threads.select(&:alive?).size
+    msg = "Worker threads expected: #{to_start}, worker threads started: #{actually_started}"
+    if actually_started < to_start
+      @logger.warn(msg)
+    else
+      @logger.info(msg)
+    end
+    @flusher_thread = Thread.new { Stud.interval(5) { @input_to_filter.push(LogStash::FLUSH) } }
   end
 
   def start_outputs
@@ -175,9 +178,16 @@ class LogStash::Pipeline
     LogStash::Util::set_thread_name("<#{plugin.class.config_name}")
     begin
       plugin.run(@input_to_filter)
-    rescue LogStash::ShutdownSignal
-      # ignore and quit
     rescue => e
+      # if plugin is stopping, ignore uncatched exceptions and exit worker
+      if plugin.stop?
+        @logger.debug("Input plugin raised exception during shutdown, ignoring it.",
+                      :plugin => plugin.class.config_name, :exception => e,
+                      :backtrace => e.backtrace)
+        return
+      end
+
+      # otherwise, report error and restart
       if @logger.debug?
         @logger.error(I18n.t("logstash.pipeline.worker-error-debug",
                              :plugin => plugin.inspect, :error => e.to_s,
@@ -187,28 +197,18 @@ class LogStash::Pipeline
         @logger.error(I18n.t("logstash.pipeline.worker-error",
                              :plugin => plugin.inspect, :error => e))
       end
-      puts e.backtrace if @logger.debug?
-      # input teardown must be synchronized since is can be called concurrently by
-      # the input worker thread and from the pipeline thread shutdown method.
-      # this means that input teardown methods must support multiple calls.
-      @run_mutex.synchronize{plugin.teardown}
-      sleep 1
+
+      # Assuming the failure that caused this exception is transient,
+      # let's sleep for a bit and execute #run again
+      sleep(1)
       retry
-    end
-  ensure
-    begin
-      # input teardown must be synchronized since is can be called concurrently by
-      # the input worker thread and from the pipeline thread shutdown method.
-      # this means that input teardown methods must support multiple calls.
-      @run_mutex.synchronize{plugin.teardown}
-    rescue LogStash::ShutdownSignal
-      # teardown could receive the ShutdownSignal, retry it
-      retry
+    ensure
+      plugin.do_close
     end
   end # def inputworker
 
   def filterworker
-    LogStash::Util::set_thread_name("|worker")
+    LogStash::Util.set_thread_name("|worker")
     begin
       while true
         event = @input_to_filter.pop
@@ -220,70 +220,57 @@ class LogStash::Pipeline
         when LogStash::FlushEvent
           # handle filter flushing here so that non threadsafe filters (thus only running one filterworker)
           # don't have to deal with thread safety implementing the flush method
-          @flusher_lock.synchronize { flush_filters_to_output! }
+          flush_filters_to_output!
         when LogStash::ShutdownEvent
           # pass it down to any other filterworker and stop this worker
           @input_to_filter.push(event)
           break
         end
       end
-    rescue => e
-      @logger.error("Exception in filterworker", "exception" => e, "backtrace" => e.backtrace)
+    rescue Exception => e
+      # Plugins authors should manage their own exceptions in the plugin code
+      # but if an exception is raised up to the worker thread they are considered
+      # fatal and logstash will not recover from this situation.
+      #
+      # Users need to check their configuration or see if there is a bug in the
+      # plugin.
+      @logger.error("Exception in filterworker, the pipeline stopped processing new events, please check your filter configuration and restart Logstash.",
+                    "exception" => e, "backtrace" => e.backtrace)
+      raise
+    ensure
+      @filters.each(&:do_close)
     end
-
-    @filters.each(&:teardown)
   end # def filterworker
 
   def outputworker
-    LogStash::Util::set_thread_name(">output")
+    LogStash::Util.set_thread_name(">output")
     @outputs.each(&:worker_setup)
 
     while true
       event = @filter_to_output.pop
       break if event == LogStash::SHUTDOWN
       output_func(event)
-    end # while true
-
+    end
+  ensure
     @outputs.each do |output|
-      output.worker_plugins.each(&:teardown)
+      output.worker_plugins.each(&:do_close)
     end
   end # def outputworker
 
-  # Shutdown this pipeline.
-  #
-  # This method is intended to be called from another thread
-  def shutdown
-    @input_threads.each do |thread|
-      # Interrupt all inputs
-      @logger.info("Sending shutdown signal to input thread", :thread => thread)
+  # initiate the pipeline shutdown sequence
+  # this method is intended to be called from outside the pipeline thread
+  # @param before_stop [Proc] code block called before performing stop operation on input plugins
+  def shutdown(&before_stop)
+    # shutdown can only start once the pipeline has completed its startup.
+    # avoid potential race conditoon between the startup sequence and this
+    # shutdown method which can be called from another thread at any time
+    sleep(0.1) while !ready?
 
-      # synchronize both ShutdownSignal and teardown below. by synchronizing both
-      # we will avoid potentially sending a shutdown signal when the inputworker is
-      # executing the teardown method.
-      @run_mutex.synchronize do
-        thread.raise(LogStash::ShutdownSignal)
-        begin
-          thread.wakeup # in case it's in blocked IO or sleeping
-        rescue ThreadError
-        end
-      end
-    end
+    # TODO: should we also check against calling shutdown multiple times concurently?
 
-    # sometimes an input is stuck in a blocking I/O so we need to tell it to teardown directly
-    @inputs.each do |input|
-      begin
-        # input teardown must be synchronized since is can be called concurrently by
-        # the input worker thread and from the pipeline thread shutdown method.
-        # this means that input teardown methods must support multiple calls.
-        @run_mutex.synchronize{input.teardown}
-      rescue LogStash::ShutdownSignal
-        # teardown could receive the ShutdownSignal, retry it
-        retry
-      end
-    end
+    before_stop.call if block_given?
 
-    # No need to send the ShutdownEvent to the filters/outputs nor to wait for
-    # the inputs to finish, because in the #run method we wait for that anyway.
+    @inputs.each(&:do_stop)
   end # def shutdown
 
   def plugin(plugin_type, name, *args)

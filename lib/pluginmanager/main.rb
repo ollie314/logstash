@@ -1,3 +1,4 @@
+# encoding: utf-8
 $LOAD_PATH.unshift(File.expand_path(File.join(__FILE__, "..", "..")))
 
 require "bootstrap/environment"
@@ -11,7 +12,6 @@ module LogStash
 end
 
 require "clamp"
-require "pluginmanager/command"
 require "pluginmanager/util"
 require "pluginmanager/gemfile"
 require "pluginmanager/install"

@@ -1,8 +1,9 @@
+# encoding: utf-8
 require 'spec_helper'
 
 module ConditionalFanciness
   def description
-    return example.metadata[:example_group][:description_args][0]
+    return self.metadata[:description]
   end
 
   def conditional(expression, &block)

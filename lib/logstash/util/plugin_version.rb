@@ -1,3 +1,4 @@
+# encoding: utf-8
 require 'logstash/errors'
 require 'rubygems/version'
 require 'forwardable'
@@ -22,8 +23,14 @@ module LogStash::Util
 
     def self.find_version!(name)
       begin
-        specification = Gem::Specification.find_by_name(name)
-        new(specification.version)
+        spec = Gem::Specification.find_by_name(name)
+        if spec.nil?
+          # Checking for nil? is a workaround for situations where find_by_name
+          # is not able to find the real spec, as for example with pre releases
+          # of plugins
+          spec = Gem::Specification.find_all_by_name(name).first
+        end
+        new(spec.version)
       rescue Gem::LoadError
         # Rescuing the LoadError and raise a Logstash specific error.
         # Likely we can't find the gem in the current GEM_PATH
@@ -38,6 +45,12 @@ module LogStash::Util
 
     def <=>(other)
       version <=> other.version
+    end
+
+    private
+
+    def self.build_from_spec(spec)
+      new(spec.version)
     end
   end
 end

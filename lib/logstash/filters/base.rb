@@ -4,28 +4,18 @@ require "logstash/event"
 require "logstash/logging"
 require "logstash/plugin"
 require "logstash/config/mixin"
+require "logstash/util/decorators"
 
 class LogStash::Filters::Base < LogStash::Plugin
   include LogStash::Config::Mixin
 
   config_name "filter"
 
-  # Note that all of the specified routing options (`type`,`tags`,`exclude_tags`,`include_fields`,
-  # `exclude_fields`) must be met in order for the event to be handled by the filter.
+  config :type, :validate => :string, :default => "", :obsolete => "You can achieve this same behavior with the new conditionals, like: `if [type] == \"sometype\" { %PLUGIN% { ... } }`."
 
-  # The type to act on. If a type is given, then this filter will only
-  # act on messages with the same type. See any input plugin's `type`
-  # attribute for more.
-  # Optional.
-  config :type, :validate => :string, :default => "", :deprecated => "You can achieve this same behavior with the new conditionals, like: `if [type] == \"sometype\" { %PLUGIN% { ... } }`."
+  config :tags, :validate => :array, :default => [], :obsolete => "You can achieve similar behavior with the new conditionals, like: `if \"sometag\" in [tags] { %PLUGIN% { ... } }`"
 
-  # Only handle events with all of these tags.
-  # Optional.
-  config :tags, :validate => :array, :default => [], :deprecated => "You can achieve similar behavior with the new conditionals, like: `if \"sometag\" in [tags] { %PLUGIN% { ... } }`"
-
-  # Only handle events without any of these tags.
-  # Optional.
-  config :exclude_tags, :validate => :array, :default => [], :deprecated => "You can achieve similar behavior with the new conditionals, like: `if !(\"sometag\" in [tags]) { %PLUGIN% { ... } }`"
+  config :exclude_tags, :validate => :array, :default => [], :obsolete => "You can achieve similar behavior with the new conditionals, like: `if (\"sometag\" not in [tags]) { %PLUGIN% { ... } }`"
 
   # If this filter is successful, add arbitrary tags to the event.
   # Tags can be dynamic and include parts of the event using the `%{field}`
@@ -179,21 +169,7 @@ class LogStash::Filters::Base < LogStash::Plugin
   # matches the filter's conditions (right type, etc)
   protected
   def filter_matched(event)
-    @add_field.each do |field, value|
-      field = event.sprintf(field)
-      value = [value] if !value.is_a?(Array)
-      value.each do |v|
-        v = event.sprintf(v)
-        if event.include?(field)
-          event[field] = [event[field]] if !event[field].is_a?(Array)
-          event[field] << v
-        else
-          event[field] = v
-        end
-        @logger.debug? and @logger.debug("filters/#{self.class.name}: adding value to field",
-                                       :field => field, :value => value)
-      end
-    end
+    LogStash::Util::Decorators.add_fields(@add_field,event,"filters/#{self.class.name}")
 
     @remove_field.each do |field|
       field = event.sprintf(field)
@@ -202,12 +178,7 @@ class LogStash::Filters::Base < LogStash::Plugin
       event.remove(field)
     end
 
-    @add_tag.each do |tag|
-      tag = event.sprintf(tag)
-      @logger.debug? and @logger.debug("filters/#{self.class.name}: adding tag",
-                                       :tag => tag)
-      (event["tags"] ||= []) << tag
-    end
+    LogStash::Util::Decorators.add_tags(@add_tag,event,"filters/#{self.class.name}")
 
     @remove_tag.each do |tag|
       break if event["tags"].nil?
@@ -220,40 +191,12 @@ class LogStash::Filters::Base < LogStash::Plugin
 
   protected
   def filter?(event)
-    if !@type.empty?
-      if event["type"] != @type
-        @logger.debug? and @logger.debug("filters/#{self.class.name}: Skipping event because type doesn't match",
-                                         :type=> @type, :event => event)
-        return false
-      end
-    end
-
-    if !@tags.empty?
-      # this filter has only works on events with certain tags,
-      # and this event has no tags.
-      return false if !event["tags"]
-
-      # Is @tags a subset of the event's tags? If not, skip it.
-      if (event["tags"] & @tags).size != @tags.size
-        @logger.debug? and @logger.debug("filters/#{self.class.name}: Skipping event because tags don't match",
-                                         :tags => tags, :event => event)
-        return false
-      end
-    end
-
-    if !@exclude_tags.empty? && event["tags"]
-      if (diff_tags = (event["tags"] & @exclude_tags)).size != 0
-        @logger.debug("filters/#{self.class.name}: Skipping event because tags contains excluded tags:",
-                      :diff_tags => diff_tags, :exclude_tags => @exclude_tags, :event => event)
-        return false
-      end
-    end
-
-    return true
-  end
+    # TODO: noop for now, remove this once we delete this call from all plugins
+    true
+  end # def filter?
 
   public
-  def teardown
+  def close
     # Nothing to do by default.
   end
 end # class LogStash::Filters::Base

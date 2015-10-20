@@ -55,6 +55,7 @@ module LogStash
       logstash-input-gelf
       logstash-input-generator
       logstash-input-graphite
+      logstash-input-http
       logstash-input-imap
       logstash-input-irc
       logstash-input-log4j
@@ -74,10 +75,10 @@ module LogStash
       logstash-input-xmpp
       logstash-input-zeromq
       logstash-input-kafka
+      logstash-input-beats
       logstash-output-cloudwatch
       logstash-output-csv
       logstash-output-elasticsearch
-      logstash-output-elasticsearch_http
       logstash-output-email
       logstash-output-exec
       logstash-output-file
@@ -137,6 +138,11 @@ module LogStash
       /^logstash-output-slack$/,
       /^logstash-input-neo4j$/,
       /^logstash-output-neo4j$/,
+      /^logstash-input-perfmon$/,
+      /^logstash-output-webhdfs$/,
+      /^logstash-input-rackspace$/,
+      /^logstash-output-rackspace$/,
+      /^logstash-input-dynamodb$/
     ])
 
 
@@ -152,7 +158,7 @@ module LogStash
 
     def self.is_released?(plugin)
       require 'gems'
-      !Gems.search(plugin).empty?
+      Gems.info(plugin) != "This rubygem could not be found."
     end
   end
 end

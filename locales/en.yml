@@ -66,11 +66,21 @@ en:
         SIGINT received. Shutting down the pipeline.
       sigterm: >-
         SIGTERM received. Shutting down the pipeline.
+      slow_shutdown: |-
+        Received shutdown signal, but pipeline is still waiting for in-flight events
+        to be processed. Sending another ^C will force quit Logstash, but this may cause
+        data loss.
+      forced_sigint: >-
+        SIGINT received. Terminating immediately..
       configtest-flag-information: |-
         You may be interested in the '--configtest' flag which you can
         use to validate logstash's configuration before you choose
         to restart a running system.
       configuration:
+        obsolete: >-
+          The setting `%{name}` in plugin `%{plugin}` is obsolete and is no
+          longer available. %{extra} If you have any questions about this, you
+          are invited to visit https://discuss.elastic.co/c/logstash and ask.
         file-not-found: |-
           No config files found: %{path}
           Can you make sure this path is a logstash config file?
@@ -122,7 +132,7 @@ en:
           This is often a permissions issue, or the wrong 
           path was specified?
       flag:
-        # Note: Wrap these at 45 chars so they display nicely when clamp emits
+        # Note: Wrap these at 55 chars so they display nicely when clamp emits
         # them in an 80-character terminal
         config: |+
           Load the logstash config from a specific file
@@ -135,20 +145,18 @@ en:
         config-string: |+
           Use the given string as the configuration
           data. Same syntax as the config file. If no
-          input is specified, then 'stdin 
-          { type => stdin }' is the default input.
-          If no output is specified, then  'stdout
-          { codec => rubydebug } }' is default output.
+          input is specified, then the following is
+          used as the default input:
+          "%{default_input}"
+          and if no output is specified, then the
+          following is used as the default output:
+          "%{default_output}"
+          If you wish to use both defaults, please use
+          the empty string for the '-e' flag.
         configtest: |+
-          Check configuration, then exit.
+          Check configuration for valid syntax and then exit.
         filterworkers: |+
           Sets the number of filter workers to run.
-        watchdog-timeout: |+
-          Set the filter watchdog timeout (in seconds).
-          This timeout is used to detect stuck filters;
-          stuck filters usually symptoms of bugs.
-          When a filter takes longer than TIMEOUT
-          seconds, it will cause logstash to abort.
         log: |+
           Write logstash internal logs to the given
           file. Without this flag, logstash will emit

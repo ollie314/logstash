@@ -1,3 +1,5 @@
+# encoding: utf-8
+require "pluginmanager/command"
 require "jar-dependencies"
 require "jar_install_post_install_hook"
 require "file-dependencies/gem"
@@ -42,12 +44,13 @@ class LogStash::PluginManager::Update < LogStash::PluginManager::Command
     filtered_plugins = plugins.map { |plugin| gemfile.find(plugin) }
       .compact
       .reject { |plugin| REJECTED_OPTIONS.any? { |key| plugin.options.has_key?(key) } }
-      .each { |plugin| gemfile.update(plugin.name) }
+      .select { |plugin| validates_version(plugin.name) }
+      .each   { |plugin| gemfile.update(plugin.name) }
 
     # force a disk sync before running bundler
     gemfile.save
 
-    puts("Updating #{filtered_plugins.collect(&:name).join(", ")}")
+    puts("Updating #{filtered_plugins.collect(&:name).join(", ")}") unless filtered_plugins.empty?
 
     # any errors will be logged to $stderr by invoke!
     # Bundler cannot update and clean gems in one operation so we have to call the CLI twice.
@@ -60,6 +63,12 @@ class LogStash::PluginManager::Update < LogStash::PluginManager::Command
     report_exception("Updated Aborted", exception)
   ensure
     display_bundler_output(output)
+  end
+
+  # validate if there is any major version update so then we can ask the user if he is
+  # sure to update or not.
+  def validates_version(plugin)
+    LogStash::PluginManager.update_to_major_version?(plugin)
   end
 
   # create list of plugins to update
@@ -98,7 +107,7 @@ class LogStash::PluginManager::Update < LogStash::PluginManager::Command
   # retrieve only the latest spec for all locally installed plugins
   # @return [Hash] result hash {plugin_name.downcase => plugin_spec}
   def find_latest_gem_specs
-    LogStash::PluginManager.find_plugins_gem_specs.inject({}) do |result, spec|
+    LogStash::PluginManager.all_installed_plugins_gem_specs(gemfile).inject({}) do |result, spec|
       previous = result[spec.name.downcase]
       result[spec.name.downcase] = previous ? [previous, spec].max_by{|s| s.version} : spec
       result

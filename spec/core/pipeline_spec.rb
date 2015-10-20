@@ -1,3 +1,4 @@
+# encoding: utf-8
 require "spec_helper"
 
 class DummyInput < LogStash::Inputs::Base
@@ -10,7 +11,7 @@ class DummyInput < LogStash::Inputs::Base
   def run(queue)
   end
 
-  def teardown
+  def close
   end
 end
 
@@ -26,7 +27,7 @@ class DummyCodec < LogStash::Codecs::Base
     event
   end
 
-  def teardown
+  def close
   end
 end
 
@@ -34,11 +35,11 @@ class DummyOutput < LogStash::Outputs::Base
   config_name "dummyoutput"
   milestone 2
 
-  attr_reader :num_teardowns
+  attr_reader :num_closes
 
   def initialize(params={})
     super
-    @num_teardowns = 0
+    @num_closes = 0
   end
 
   def register
@@ -47,8 +48,8 @@ class DummyOutput < LogStash::Outputs::Base
   def receive(event)
   end
 
-  def teardown
-    @num_teardowns += 1
+  def close
+    @num_closes += 1
   end
 end
 
@@ -58,16 +59,13 @@ end
 
 describe LogStash::Pipeline do
 
-  context "teardown" do
+context "close" do
 
-    before(:each) do
-      LogStash::Plugin.stub(:lookup)
-        .with("input", "dummyinput").and_return(DummyInput)
-      LogStash::Plugin.stub(:lookup)
-        .with("codec", "plain").and_return(DummyCodec)
-      LogStash::Plugin.stub(:lookup)
-        .with("output", "dummyoutput").and_return(DummyOutput)
-    end
+  before(:each) do
+    allow(LogStash::Plugin).to receive(:lookup).with("input", "dummyinput").and_return(DummyInput)
+    allow(LogStash::Plugin).to receive(:lookup).with("codec", "plain").and_return(DummyCodec)
+    allow(LogStash::Plugin).to receive(:lookup).with("output", "dummyoutput").and_return(DummyOutput)
+  end
 
     let(:test_config_without_output_workers) {
       <<-eos
@@ -95,24 +93,24 @@ describe LogStash::Pipeline do
       eos
     }
 
-    context "output teardown" do
-      it "should call teardown of output without output-workers" do
+    context "output close" do
+      it "should call close of output without output-workers" do
         pipeline = TestPipeline.new(test_config_without_output_workers)
         pipeline.run
 
         expect(pipeline.outputs.size ).to eq(1)
         expect(pipeline.outputs.first.worker_plugins.size ).to eq(1)
-        expect(pipeline.outputs.first.worker_plugins.first.num_teardowns ).to eq(1)
+        expect(pipeline.outputs.first.worker_plugins.first.num_closes ).to eq(1)
       end
 
-      it "should call output teardown correctly with output workers" do
+      it "should call output close correctly with output workers" do
         pipeline = TestPipeline.new(test_config_with_output_workers)
         pipeline.run
 
         expect(pipeline.outputs.size ).to eq(1)
-        expect(pipeline.outputs.first.num_teardowns).to eq(0)
+        expect(pipeline.outputs.first.num_closes).to eq(0)
         pipeline.outputs.first.worker_plugins.each do |plugin|
-          expect(plugin.num_teardowns ).to eq(1)
+          expect(plugin.num_closes ).to eq(1)
         end
       end
     end

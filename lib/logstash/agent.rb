@@ -2,26 +2,28 @@
 require "clamp" # gem 'clamp'
 require "logstash/environment"
 require "logstash/errors"
+require "logstash/config/cpu_core_strategy"
 require "uri"
 require "net/http"
 LogStash::Environment.load_locale!
 
 class LogStash::Agent < Clamp::Command
+  DEFAULT_INPUT = "input { stdin { type => stdin } }"
+  DEFAULT_OUTPUT = "output { stdout { codec => rubydebug } }"
+
   option ["-f", "--config"], "CONFIG_PATH",
     I18n.t("logstash.agent.flag.config"),
     :attribute_name => :config_path
 
   option "-e", "CONFIG_STRING",
-    I18n.t("logstash.agent.flag.config-string"),
+    I18n.t("logstash.agent.flag.config-string",
+           :default_input => DEFAULT_INPUT, :default_output => DEFAULT_OUTPUT),
     :default => "", :attribute_name => :config_string
 
   option ["-w", "--filterworkers"], "COUNT",
     I18n.t("logstash.agent.flag.filterworkers"),
-    :attribute_name => :filter_workers, :default => 1, &:to_i
-
-  option "--watchdog-timeout", "SECONDS",
-    I18n.t("logstash.agent.flag.watchdog-timeout"),
-    :default => 10, &:to_f
+    :attribute_name => :filter_workers,
+    :default => LogStash::Config::CpuCoreStrategy.fifty_percent, &:to_i
 
   option ["-l", "--log"], "FILE",
     I18n.t("logstash.agent.flag.log"),
@@ -38,6 +40,11 @@ class LogStash::Agent < Clamp::Command
 
   option ["-V", "--version"], :flag,
     I18n.t("logstash.agent.flag.version")
+
+ option ["-p", "--pluginpath"] , "PATH",
+   I18n.t("logstash.agent.flag.pluginpath"),
+   :multivalued => true,
+   :attribute_name => :plugin_paths
 
   option ["-t", "--configtest"], :flag,
     I18n.t("logstash.agent.flag.configtest"),
@@ -97,11 +104,11 @@ class LogStash::Agent < Clamp::Command
     else
       # include a default stdin input if no inputs given
       if @config_string !~ /input *{/
-        @config_string += "input { stdin { type => stdin } }"
+        @config_string += DEFAULT_INPUT
       end
       # include a default stdout output if no outputs given
       if @config_string !~ /output *{/
-        @config_string += "output { stdout { codec => rubydebug } }"
+        @config_string += DEFAULT_OUTPUT
       end
     end
 
@@ -113,14 +120,22 @@ class LogStash::Agent < Clamp::Command
 
     # Make SIGINT shutdown the pipeline.
     sigint_id = Stud::trap("INT") do
-      @logger.warn(I18n.t("logstash.agent.sigint"))
-      pipeline.shutdown
+
+      if @interrupted_once
+        @logger.fatal(I18n.t("logstash.agent.forced_sigint"))
+        exit
+      else
+        @logger.warn(I18n.t("logstash.agent.sigint"))
+        Thread.new(@logger) {|logger| sleep 5; logger.warn(I18n.t("logstash.agent.slow_shutdown")) }
+        @interrupted_once = true
+        shutdown(pipeline)
+      end
     end
 
     # Make SIGTERM shutdown the pipeline.
     sigterm_id = Stud::trap("TERM") do
       @logger.warn(I18n.t("logstash.agent.sigterm"))
-      pipeline.shutdown
+      shutdown(pipeline)
     end
 
     Stud::trap("HUP") do
@@ -159,19 +174,20 @@ class LogStash::Agent < Clamp::Command
     Stud::untrap("TERM", sigterm_id) unless sigterm_id.nil?
   end # def execute
 
+  def shutdown(pipeline)
+    pipeline.shutdown do
+      InflightEventsReporter.logger = @logger
+      InflightEventsReporter.start(pipeline.input_to_filter, pipeline.filter_to_output, pipeline.outputs)
+    end
+  end
+
   def show_version
     show_version_logstash
 
     if [:info, :debug].include?(verbosity?) || debug? || verbose?
       show_version_ruby
-
-      if RUBY_PLATFORM == "java"
-        show_version_java
-      end
-
-      if [:debug].include?(verbosity?) || debug?
-        show_gems
-      end
+      show_version_java if LogStash::Environment.jruby?
+      show_gems if [:debug].include?(verbosity?) || debug?
     end
   end # def show_version
 
@@ -202,6 +218,7 @@ class LogStash::Agent < Clamp::Command
   # Log file stuff, plugin path checking, etc.
   def configure
     configure_logging(log_file)
+    configure_plugin_paths(plugin_paths)
   end # def configure
 
   # Point logging at a specific path.
@@ -227,7 +244,6 @@ class LogStash::Agent < Clamp::Command
       else
         @logger.level = :warn
       end
-
     end
 
     if log_file
@@ -251,6 +267,15 @@ class LogStash::Agent < Clamp::Command
     # TODO(sissel): redirect stdout/stderr to the log as well
     # http://jira.codehaus.org/browse/JRUBY-7003
   end # def configure_logging
+
+  # add the given paths for ungemified/bare plugins lookups
+  # @param paths [String, Array<String>] plugins path string or list of path strings to add
+  def configure_plugin_paths(paths)
+    Array(paths).each do |path|
+      fail(I18n.t("logstash.agent.configuration.plugin_path_missing", :path => path)) unless File.directory?(path)
+      LogStash::Environment.add_plugin_path(path)
+    end
+  end
 
   def load_config(path)
     begin

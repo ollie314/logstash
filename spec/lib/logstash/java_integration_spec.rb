@@ -13,7 +13,7 @@ describe "Java integration" do
     context "Java::JavaUtil::ArrayList" do
 
       it "should report to be a Ruby Array" do
-        expect(Java::JavaUtil::ArrayList.new.is_a?(Array)).to be_true
+        expect(Java::JavaUtil::ArrayList.new.is_a?(Array)).to eq(true)
       end
 
       it "should be class equivalent to Ruby Array" do
@@ -26,13 +26,13 @@ describe "Java integration" do
           end
         end.not_to raise_error
 
-        expect(Array === Java::JavaUtil::ArrayList.new).to be_true
+        expect(Array === Java::JavaUtil::ArrayList.new).to eq(true)
       end
     end
 
     context "Java::JavaUtil::LinkedHashMap" do
       it "should report to be a Ruby Hash" do
-        expect(Java::JavaUtil::LinkedHashMap.new.is_a?(Hash)).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new.is_a?(Hash)).to eq(true)
       end
 
       it "should be class equivalent to Ruby Hash" do
@@ -45,7 +45,7 @@ describe "Java integration" do
           end
         end.not_to raise_error
 
-        expect(Hash === Java::JavaUtil::LinkedHashMap.new).to be_true
+        expect(Hash === Java::JavaUtil::LinkedHashMap.new).to eq(true)
       end
     end
   end
@@ -81,6 +81,23 @@ describe "Java integration" do
 
   context "Java::JavaUtil::Collection" do
     subject{Java::JavaUtil::ArrayList.new(initial_array)}
+
+    context "when inspecting" do
+      let(:items) { [:a, {:b => :c}] }
+      subject { java.util.ArrayList.new(items) }
+
+      it "should include the contents of the Collection" do
+        expect(subject.inspect).to include(items.inspect)
+      end
+
+      it "should include the class name" do
+        expect(subject.inspect).to include("ArrayList")
+      end
+
+      it "should include the hash code of the collection" do
+        expect(subject.inspect).to include(subject.hashCode.to_s)
+      end
+    end
 
     context "when deleting a unique instance" do
       let(:initial_array) {["foo", "bar"]}
@@ -194,63 +211,93 @@ describe "Java integration" do
         end
       end
     end
+
+    context "when compacting" do
+      context "#compact with nils" do
+        let(:initial_array) { [1,2,3,nil,nil,6] }
+        it "should remove nil values from a copy" do
+          expect(subject.compact).to eq([1,2,3,6])
+          expect(subject).to eq([1,2,3,nil,nil,6])
+        end
+      end
+
+      context "#compact! with nils" do
+        let(:initial_array) { [1,2,3,nil,nil,6] }
+        it "should remove nil values" do
+          expect(subject.compact!).to eq([1,2,3,6])
+          expect(subject).to eq([1,2,3,6])
+        end
+
+        it "should return the original" do
+          expect(subject.compact!.object_id).to eq(subject.object_id)
+        end
+      end
+
+      context "#compact! without nils" do
+        let(:initial_array) { [1,2,3,6] }
+        it "should return nil" do
+          expect(subject.compact!).to be nil
+          expect(subject).to eq([1,2,3,6])
+        end
+      end
+    end
   end
 
   context "Enumerable implementation" do
     context "Java Map interface should report key with nil value as included" do
 
       it "should support include? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => nil}).include?("foo")).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => nil}).include?("foo")).to eq(true)
       end
 
       it "should support has_key? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => nil}).has_key?("foo")).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => nil}).has_key?("foo")).to eq(true)
       end
 
       it "should support member? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => nil}).member?("foo")).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => nil}).member?("foo")).to eq(true)
       end
 
       it "should support key? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => nil}).key?("foo")).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => nil}).key?("foo")).to eq(true)
       end
     end
 
     context "Java Map interface should report key with a value as included" do
 
       it "should support include? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).include?("foo")).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).include?("foo")).to eq(true)
       end
 
       it "should support has_key? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).has_key?("foo")).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).has_key?("foo")).to eq(true)
       end
 
       it "should support member? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).member?("foo")).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).member?("foo")).to eq(true)
       end
 
       it "should support key? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).key?("foo")).to be_true
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).key?("foo")).to eq(true)
       end
     end
 
     context "Java Map interface should report non existing key as not included" do
 
       it "should support include? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).include?("bar")).to be_false
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1})).not_to include("bar")
       end
 
       it "should support has_key? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).has_key?("bar")).to be_false
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).has_key?("bar")).to eq(false)
       end
 
       it "should support member? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).member?("bar")).to be_false
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).member?("bar")).to eq(false)
       end
 
       it "should support key? method" do
-        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).key?("bar")).to be_false
+        expect(Java::JavaUtil::LinkedHashMap.new({"foo" => 1}).key?("bar")).to eq(false)
       end
     end
   end

@@ -1,3 +1,4 @@
+# encoding: utf-8
 require "spec_helper"
 require "logstash/config/mixin"
 
@@ -94,6 +95,60 @@ describe LogStash::Config::Mixin do
     it "should correctly copy password types" do
       clone = subject.class.new(subject.params)
       expect(clone.password.value).to(be == secret)
+    end
+  end
+
+  describe "obsolete settings" do
+    let(:plugin_class) do
+      Class.new(LogStash::Inputs::Base) do
+        include LogStash::Config::Mixin
+        config_name "example"
+        config :foo, :validate => :string, :obsolete => "This feature was removed."
+      end
+    end
+
+    context "when using an obsolete setting" do
+      it "should cause a configuration error" do
+        expect {
+          plugin_class.new("foo" => "hello")
+        }.to raise_error(LogStash::ConfigurationError)
+      end
+    end
+
+    context "when using an obsolete settings from the parent class" do
+      it "should cause a configuration error" do
+        expect {
+          plugin_class.new("debug" => true)
+        }.to raise_error(LogStash::ConfigurationError)
+      end
+    end
+
+    context "when not using an obsolete setting" do
+      it "should not cause a configuration error" do
+        expect {
+          plugin_class.new({})
+        }.not_to raise_error
+      end
+    end
+  end
+
+  context "#params" do
+    let(:plugin_class) do
+      Class.new(LogStash::Filters::Base)  do
+        config_name "fake"
+        config :password, :validate => :password
+        config :bad, :validate => :string, :default => "my default", :obsolete => "not here"
+      end
+    end
+
+    subject { plugin_class.new({ "password" => "secret" }) }
+
+    it "should not return the obsolete options" do
+      expect(subject.params).not_to include("bad")
+    end
+
+    it "should include any other params" do
+      expect(subject.params).to include("password")
     end
   end
 end

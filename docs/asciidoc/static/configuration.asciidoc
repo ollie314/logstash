@@ -26,7 +26,7 @@ bin/logstash -f logstash-simple.conf
 Et voilà! Logstash reads  the specified configuration file and outputs to both Elasticsearch and stdout. Before we
 move on to some <<config-examples,more complex examples>>, let's take a closer look at what's in a config file.
 
-[float]
+[[configuration-file-structure]]
 === Structure of a Config File
 
 A Logstash config file has a separate section for each type of plugin you want to add to the event processing pipeline. For example:
@@ -54,7 +54,7 @@ multiple filters, they are applied in the order of their appearance in the confi
 
 [float]
 [[plugin_configuration]]
-=== Plugins
+=== Plugin Configuration
 
 The configuration of a plugin consists of the plugin name followed
 by a block of settings for that plugin. For example, this input section configures two file inputs:
@@ -79,6 +79,7 @@ In this example, two settings are configured for each of the file inputs: 'path'
 The settings you can configure vary according to the plugin type. For information about each plugin, see <<input-plugins,Input Plugins>>, <<output-plugins, Output Plugins>>, <<filter-plugins,Filter Plugins>>, and <<codec-plugins,Codec Plugins>>.
 
 [float]
+[[plugin-value-types]]
 === Value Types
 
 A plugin can require that the value for a setting be a
@@ -149,6 +150,8 @@ Input codecs provide a convenient way to decode your data before it enters the i
 Output codecs provide a convenient way to encode your data before it leaves the output.
 Using an input or output codec eliminates the need for a separate filter in your Logstash pipeline.
 
+A list of available codecs can be found at the <<codec-plugins,Codec Plugins>> page.
+
 Example:
 
 [source,js]
@@ -161,7 +164,7 @@ Example:
 ==== Hash
 
 A hash is a collection of key value pairs specified in the format `"field1" => "value1"`.
-Note that mutliple key value entries are separated by spaces rather than commas.
+Note that multiple key value entries are separated by spaces rather than commas.
 
 Example:
 
@@ -217,16 +220,22 @@ Example:
 [float]
 ==== String
 
-A string must be a single character sequence. Note that string values are enclosed in quotes.
+A string must be a single character sequence. Note that string values are
+enclosed in quotes, either double or single. Literal quotes in the string
+need to be escaped with a backslash if they are of the same kind as the string
+delimiter, i.e. single quotes within a single-quoted string need to be escaped
+as well as double quotes within a double-quoted string.
 
 Example:
 
 [source,js]
 ----------------------------------
   name => "Hello world"
+  name => 'It\'s a beautiful day'
 ----------------------------------
 
 [float]
+[[comments]]
 === Comments
 
 Comments are the same as in perl, ruby, and python. A comment starts with a '#' character, and does not need to be at the beginning of a line. For example:
@@ -240,7 +249,6 @@ input { # comments can appear at the end of a line, too
 }
 ----------------------------------
 
-[float]
 [[event-dependent-configuration]]
 === Event Dependent Configuration
 
@@ -315,7 +323,7 @@ output {
 }
 ----------------------------------
 
-You can also format times using in this sprintf format. Instead of specifying a field name, use the `+FORMAT` syntax where `FORMAT` is a http://joda-time.sourceforge.net/apidocs/org/joda/time/format/DateTimeFormat.html[time format].
+You can also format times using this sprintf format. Instead of specifying a field name, use the `+FORMAT` syntax where `FORMAT` is a http://joda-time.sourceforge.net/apidocs/org/joda/time/format/DateTimeFormat.html[time format].
 
 For example, if you want to use the file output to write to logs based on the
 hour and the 'type' field:

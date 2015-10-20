@@ -50,6 +50,10 @@ describe LogStash::Event do
         expect(subject.sprintf("%{+%s}")).to eq("1356998400")
       end
 
+      it "should work if there is no fieldref in the string" do
+        expect(subject.sprintf("bonjour")).to eq("bonjour")
+      end
+
       it "should raise error when formatting %{+%s} when @timestamp field is missing" do
         str = "hello-%{+%s}"
         subj = subject.clone
@@ -61,6 +65,10 @@ describe LogStash::Event do
         expect(subject.sprintf("%{+YYYY}")).to eq("2013")
         expect(subject.sprintf("%{+MM}")).to eq("01")
         expect(subject.sprintf("%{+HH}")).to eq("00")
+      end
+
+      it "should support mixed string" do
+        expect(subject.sprintf("foo %{+YYYY-MM-dd} %{type}")).to eq("foo 2013-01-01 sprintf")
       end
 
       it "should raise error with %{+format} syntax when @timestamp field is missing", :if => RUBY_ENGINE == "jruby" do
@@ -90,6 +98,24 @@ describe LogStash::Event do
 
       it "should allow to use nested hash from the metadata field" do
         expect(subject.sprintf("%{[@metadata][have-to-go][deeper]}")).to eq("inception")
+      end
+
+      it "should return a json string if the key is a hash" do
+        expect(subject.sprintf("%{[j][k3]}")).to eq("{\"4\":\"m\"}")
+      end
+
+      it "should not strip last character" do
+        expect(subject.sprintf("%{type}%{message}|")).to eq("sprintfhello world|")
+      end
+
+      context "#encoding" do
+        it "should return known patterns as UTF-8" do
+          expect(subject.sprintf("%{message}").encoding).to eq(Encoding::UTF_8)
+        end
+
+        it "should return unknown patterns as UTF-8" do
+          expect(subject.sprintf("%{unkown_pattern}").encoding).to eq(Encoding::UTF_8)
+        end
       end
     end
 
@@ -123,32 +149,32 @@ describe LogStash::Event do
 
     context "#include?" do
       it "should include existing fields" do
-        expect(subject.include?("c")).to be_true
-        expect(subject.include?("[c][d]")).to be_true
-        expect(subject.include?("[j][k4][0][nested]")).to be_true
+        expect(subject.include?("c")).to eq(true)
+        expect(subject.include?("[c][d]")).to eq(true)
+        expect(subject.include?("[j][k4][0][nested]")).to eq(true)
       end
 
       it "should include field with nil value" do
-        expect(subject.include?("nilfield")).to be_true
+        expect(subject.include?("nilfield")).to eq(true)
       end
 
       it "should include @metadata field" do
-        expect(subject.include?("@metadata")).to be_true
+        expect(subject.include?("@metadata")).to eq(true)
       end
 
       it "should include field within @metadata" do
-        expect(subject.include?("[@metadata][fancy]")).to be_true
+        expect(subject.include?("[@metadata][fancy]")).to eq(true)
       end
 
       it "should not include non-existing fields" do
-        expect(subject.include?("doesnotexist")).to be_false
-        expect(subject.include?("[j][doesnotexist]")).to be_false
-        expect(subject.include?("[tag][0][hello][yes]")).to be_false
+        expect(subject.include?("doesnotexist")).to eq(false)
+        expect(subject.include?("[j][doesnotexist]")).to eq(false)
+        expect(subject.include?("[tag][0][hello][yes]")).to eq(false)
       end
 
       it "should include within arrays" do
-        expect(subject.include?("[tags][0]")).to be_true
-        expect(subject.include?("[tags][1]")).to be_false
+        expect(subject.include?("[tags][0]")).to eq(true)
+        expect(subject.include?("[tags][1]")).to eq(false)
       end
     end
 

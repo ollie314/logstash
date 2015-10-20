@@ -1,3 +1,4 @@
+# encoding: utf-8
 require "spec_helper"
 require "logstash/plugin"
 
@@ -27,6 +28,22 @@ describe LogStash::Plugin do
       config_name "lady_gaga"
     end
     expect(LogStash::Plugin.lookup("filter", "lady_gaga")).to eq(LogStash::Filters::LadyGaga)
+  end
+
+  describe "#inspect" do
+    class LogStash::Filters::MyTestFilter < LogStash::Filters::Base
+      config_name "param1"
+      config :num, :validate => :number, :default => 20
+      config :str, :validate => :string, :default => "test"
+    end
+    subject { LogStash::Filters::MyTestFilter.new("num" => 1, "str" => "hello") }
+
+    it "should print the class of the filter" do
+      expect(subject.inspect).to match(/^<LogStash::Filters::MyTestFilter/)
+    end
+    it "should list config options and values" do
+      expect(subject.inspect).to match(/num=>1, str=>"hello"/)
+    end
   end
 
   context "when validating the plugin version" do

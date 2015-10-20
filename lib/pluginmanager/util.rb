@@ -1,3 +1,4 @@
+# encoding: utf-8
 require "rubygems/package"
 
 module LogStash::PluginManager
@@ -17,7 +18,10 @@ module LogStash::PluginManager
       end
     else
       dep = Gem::Dependency.new(plugin, version || Gem::Requirement.default)
-      specs, error = Gem::SpecFetcher.fetcher.spec_for_dependency(dep)
+      specs, errors = Gem::SpecFetcher.fetcher.spec_for_dependency(dep)
+
+      # dump errors
+      errors.each { |error| $stderr.puts(error.wordy) }
 
       # depending on version requirements, multiple specs can be returned in which case
       # we will grab the one with the highest version number
@@ -27,10 +31,38 @@ module LogStash::PluginManager
         end
         return valid
       else
-        $stderr.puts("Plugin #{plugin}" + (version ? " version #{version}" : "") + " does not exist")
+        $stderr.puts("Plugin #{plugin}" + (version ? " version #{version}" : "") + " does not exist") if errors.empty?
         return false
       end
     end
+  end
+
+  # Fetch latest version information as in rubygems
+  # @param [String] The plugin name
+  # @param [Hash] Set of available options when fetching the information
+  # @option options [Boolean] :pre Include pre release versions in the search (default: false)
+  # @return [Hash] The plugin version information as returned by rubygems
+  def self.fetch_latest_version_info(plugin, options={})
+    require "gems"
+    exclude_prereleases =  options.fetch(:pre, false)
+    versions = Gems.versions(plugin)
+    versions = versions.select { |version| !version["prerelease"] } if !exclude_prereleases
+    versions.first
+  end
+
+  # Let's you decide to update to the last version of a plugin if this is a major version
+  # @param [String] A plugin name
+  # @return [Boolean] True in case the update is moving forward, false otherwise
+  def self.update_to_major_version?(plugin_name)
+    plugin_version  = fetch_latest_version_info(plugin_name)
+    latest_version  = plugin_version['number'].split(".")
+    current_version = Gem::Specification.find_by_name(plugin_name).version.version.split(".")
+    if (latest_version[0].to_i > current_version[0].to_i)
+      ## warn if users want to continue
+      puts("You are updating #{plugin_name} to a new version #{latest_version.join('.')}, which may not be compatible with #{current_version.join('.')}. are you sure you want to proceed (Y/N)?")
+      return ( "y" == STDIN.gets.strip.downcase ? true : false)
+    end
+    true
   end
 
   # @param spec [Gem::Specification] plugin gem specification

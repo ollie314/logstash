@@ -1,3 +1,4 @@
+# encoding: utf-8
 require "java"
 
 # this is mainly for usage with JrJackson json parsing in :raw mode which genenerates
@@ -77,6 +78,22 @@ module java::util::Collection
     self.removeAll([o]) ? o : block_given? ? yield : nil
   end
 
+  def compact
+    duped = Java::JavaUtil::ArrayList.new(self)
+    duped.compact!
+    duped
+  end
+
+  def compact!
+    size_before = self.size
+    self.removeAll(java::util::Collections.singleton(nil))
+    if size_before == self.size
+      nil
+    else
+      self
+    end
+  end
+
   # support the Ruby intersection method on Java Collection
   def &(other)
     # transform self into a LinkedHashSet to remove duplicates and preserve order as defined by the Ruby Array intersection contract
@@ -91,5 +108,9 @@ module java::util::Collection
     duped = Java::JavaUtil::LinkedHashSet.new(self)
     duped.addAll(other)
     duped
+  end
+
+  def inspect
+    "<#{self.class.name}:#{self.hashCode} #{self.to_a(&:inspect)}>"
   end
 end

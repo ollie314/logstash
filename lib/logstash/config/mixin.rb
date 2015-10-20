@@ -1,5 +1,4 @@
 # encoding: utf-8
-
 require "logstash/namespace"
 require "logstash/config/registry"
 require "logstash/logging"
@@ -77,6 +76,13 @@ module LogStash::Config::Mixin
                      "about this, please visit the #logstash channel " +
                      "on freenode irc.", :name => name, :plugin => self)
       end
+      if opts && opts[:obsolete]
+        extra = opts[:obsolete].is_a?(String) ? opts[:obsolete] : ""
+        extra.gsub!("%PLUGIN%", self.class.config_name)
+        raise LogStash::ConfigurationError,
+          I18n.t("logstash.agent.configuration.obsolete", :name => name,
+                 :plugin => self.class.config_name, :extra => extra)
+      end
     end
 
     # Set defaults from 'config :foo, :default => somevalue'
@@ -102,6 +108,16 @@ module LogStash::Config::Mixin
     if !self.class.validate(params)
       raise LogStash::ConfigurationError,
         I18n.t("logstash.agent.configuration.invalid_plugin_settings")
+    end
+
+    # We remove any config options marked as obsolete,
+    # no code should be associated to them and their values should not bleed
+    # to the plugin context.
+    #
+    # This need to be done after fetching the options from the parents classed
+    params.reject! do |name, value|
+      opts = self.class.get_config[name]
+      opts.include?(:obsolete)
     end
 
     # set instance variables like '@foo'  for each config value given.
