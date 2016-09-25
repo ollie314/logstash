@@ -1,16 +1,15 @@
-# Logstash [![Code Climate](https://codeclimate.com/github/elasticsearch/logstash/badges/gpa.svg)](https://codeclimate.com/github/elasticsearch/logstash) [![Coverage Status](https://coveralls.io/repos/elasticsearch/logstash/badge.svg?branch=origin%2Fmaster)](https://coveralls.io/r/elasticsearch/logstash?branch=origin%2Fmaster)
+# Logstash [![Code Climate](https://codeclimate.com/github/elasticsearch/logstash/badges/gpa.svg)](https://codeclimate.com/github/elasticsearch/logstash)
 
 ### Build status
 
-| Branch | master   | 2.0 | 1.5
+| Test | master | 5.0 | 2.4 |
 |---|---|---|---|
-| core |[![Build Status](http://build-eu-00.elastic.co/view/LS%20Master/job/logstash_regression_master/badge/icon)](http://build-eu-00.elastic.co/view/LS%20Master/job/logstash_regression_master/)   | [![Build Status](http://build-eu-00.elastic.co/view/LS%202.0/job/logstash_regression_20/badge/icon)](http://build-eu-00.elastic.co/view/LS%202.0/job/logstash_regression_20/)  | [![Build Status](http://build-eu-00.elastic.co/view/LS%201.5/job/logstash_regression_15/badge/icon)](http://build-eu-00.elastic.co/view/LS%201.5/job/logstash_regression_15/)   |
-| integration | [![Build Status](http://build-eu-00.elastic.co/view/LS%20Master/job/Logstash_Master_Default_Plugins/badge/icon)](http://build-eu-00.elastic.co/view/LS%20Master/job/Logstash_Master_Default_Plugins/) | [![Build Status](http://build-eu-00.elastic.co/view/LS%202.0/job/Logstash_Default_Plugins_20/badge/icon)](http://build-eu-00.elastic.co/view/LS%202.0/job/Logstash_Default_Plugins_20/) | [![Build Status](http://build-eu-00.elastic.co/view/LS%201.5/job/Logstash_15_Default_Plugins/badge/icon)](http://build-eu-00.elastic.co/view/LS%201.5/job/Logstash_15_Default_Plugins/) |
+| core | [![Build Status](https://travis-ci.org/elastic/logstash.svg?branch=master)](https://travis-ci.org/elastic/logstash) | [![Build Status](https://travis-ci.org/elastic/logstash.svg?branch=5.0)](https://travis-ci.org/elastic/logstash) | [![Build Status](https://travis-ci.org/elastic/logstash.svg?branch=2.4)](https://travis-ci.org/elastic/logstash) |
 
 Logstash is a tool for managing events and logs. You can use it to collect
 logs, parse them, and store them for later use (like, for searching).  If you
-store them in [Elasticsearch](http://www.elastic.co/guide/en/elasticsearch/reference/current/index.html),
-you can view and analyze them with [Kibana](http://www.elastic.co/guide/en/kibana/current/index.html).
+store them in [Elasticsearch](https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html),
+you can view and analyze them with [Kibana](https://www.elastic.co/guide/en/kibana/current/index.html).
 
 It is fully free and fully open source. The license is Apache 2.0, meaning you
 are pretty much free to use it however you want in whatever way.
@@ -25,16 +24,13 @@ repositories under the [logstash-plugins](https://github.com/logstash-plugins) g
 gets published to RubyGems.org. Logstash has added plugin infrastructure to easily maintain the lifecyle of the plugin.
 For more details and rationale behind these changes, see our [blogpost](https://www.elastic.co/blog/plugin-ecosystem-changes/).
 
-[Elasticsearch logstash-contrib repo](https://github.com/elasticsearch/logstash-contrib) is deprecated. We
+[Elasticsearch logstash-contrib repo](https://github.com/elastic/logstash-contrib) is deprecated. We
 have moved all of the plugins that existed there into their own repositories. We are migrating all of the pull requests
 and issues from logstash-contrib to the new repositories.
 
 For more info on developing and testing these plugins, please see the [README](https://github.com/logstash-plugins/logstash-output-elasticsearch/blob/master/README.md) on *any* plugin repository.
 
 ### Plugin Issues and Pull Requests
-
-We are migrating all of the existing pull requests to their respective repositories. Rest assured, we will maintain
-all of the git history for these requests.
 
 **Please open new issues and pull requests for plugins under its own repository**
 
@@ -46,7 +42,7 @@ Logstash core will continue to exist under this repository and all related issue
 
 - [#logstash on freenode IRC](https://webchat.freenode.net/?channels=logstash)
 - [logstash-users on Google Groups](https://groups.google.com/d/forum/logstash-users)
-- [Logstash Documentation](http://www.elastic.co/guide/en/logstash/current/index.html)
+- [Logstash Documentation](https://www.elastic.co/guide/en/logstash/current/index.html)
 - [Logstash Product Information](https://www.elastic.co/products/logstash)
 - [Elastic Support](https://www.elastic.co/subscriptions)
 
@@ -68,8 +64,22 @@ or bootstrap & install the core plugins required to run the tests
 
 To verify your environment, run `bin/logstash version` which should look like this
 
-    $ bin/logstash version
+    $ bin/logstash --version
     logstash 2.0.0.dev
+
+If you are seeing errors that look like
+
+    $ rake bootstrap
+    Installing minitar >= 0 because the build process needs it.
+    [bootstrap] Fetching and installing gem: minitar (>= 0)
+    rake aborted!
+    LoadError: no such file to load -- archive/tar/minitar
+    /Users/<user>/projects/logstash/rakelib/vendor.rake:17:in `untar'
+    /Users/<user>/projects/logstash/rakelib/vendor.rake:86:in `(root)'
+    Tasks: TOP => bootstrap => vendor:all => vendor:jruby
+    (See full trace by running task with --trace)
+
+then you may need to update your version of rubygems. Run `gem -v` to see the version of rubygems installed. Version 2.5.2 or higher should work. To update rubygems run `gem update --system` (you may need to run with `sudo` if you're using your system Ruby environment).
 
 ## Testing
 
@@ -90,11 +100,6 @@ For testing you can use the *test* `rake` tasks and the `bin/rspec` command, see
     bin/rspec
     bin/rspec spec/foo/bar_spec.rb
 
----
-Note that if a plugin is installed using the plugin manager `bin/plugin install ...` do not forget to also install the plugins development dependencies using the following command after the plugin installation:
-
-    bin/plugin install --development
-
 ### Plugins tests
 
 To run the tests of all currently installed plugins:
@@ -107,9 +112,9 @@ You can install the default set of plugins included in the logstash package or a
     rake test:install-all
 
 ---
-Note that if a plugin is installed using the plugin manager `bin/plugin install ...` do not forget to also install the plugins development dependencies using the following command after the plugin installation:
+Note that if a plugin is installed using the plugin manager `bin/logstash-plugin install ...` do not forget to also install the plugins development dependencies using the following command after the plugin installation:
 
-    bin/plugin install --development
+    bin/logstash-plugin install --development
 
 ## Developing plugins
 
@@ -122,7 +127,7 @@ The documentation for developing plugins can be found in the plugins README, see
 
 ## Drip Launcher
 
-[Drip](https://github.com/ninjudd/drip) is a tool which help solve the slow JVM startup problem. The drip script is intended to be a drop-in replacement for the java command. We recommend using drip during development, in particular for running tests. Using drip, the first invokation of a command will not be faster but the subsequent commands will be swift.
+[Drip](https://github.com/ninjudd/drip) is a tool that solves the slow JVM startup problem. The drip script is intended to be a drop-in replacement for the java command. We recommend using drip during development, in particular for running tests. Using drip, the first invocation of a command will not be faster but the subsequent commands will be swift.
 
 To tell logstash to use drip, either set the `USE_DRIP=1` environment variable or set `` JAVACMD=`which drip` ``.
 
@@ -133,7 +138,7 @@ Examples:
 
 **Caveats**
 
-Drip does not work with STDIN. You cannot use drip for running configs which uses the stdin plugin.
+Drip does not work with STDIN. You cannot use drip for running configs which use the stdin plugin.
 
 
 ## Building
@@ -166,4 +171,4 @@ see that here.
 It is more important to me that you are able to contribute.
 
 For more information about contributing, see the
-[CONTRIBUTING](CONTRIBUTING.md) file.
+[CONTRIBUTING](./CONTRIBUTING.md) file.

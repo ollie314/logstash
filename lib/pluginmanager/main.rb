@@ -18,6 +18,9 @@ require "pluginmanager/install"
 require "pluginmanager/uninstall"
 require "pluginmanager/list"
 require "pluginmanager/update"
+require "pluginmanager/pack"
+require "pluginmanager/unpack"
+require "pluginmanager/generate"
 
 module LogStash
   module PluginManager
@@ -26,15 +29,18 @@ module LogStash
     class Main < Clamp::Command
       subcommand "install", "Install a plugin", LogStash::PluginManager::Install
       subcommand "uninstall", "Uninstall a plugin", LogStash::PluginManager::Uninstall
-      subcommand "update", "Install a plugin", LogStash::PluginManager::Update
+      subcommand "update", "Update a plugin", LogStash::PluginManager::Update
+      subcommand "pack", "Package currently installed plugins", LogStash::PluginManager::Pack
+      subcommand "unpack", "Unpack packaged plugins", LogStash::PluginManager::Unpack
       subcommand "list", "List all installed plugins", LogStash::PluginManager::List
+      subcommand "generate", "Create the foundation for a new plugin", LogStash::PluginManager::Generate
     end
   end
 end
 
 if $0 == __FILE__
   begin
-    LogStash::PluginManager::Main.run("bin/plugin", ARGV)
+    LogStash::PluginManager::Main.run("bin/logstash-plugin", ARGV)
   rescue LogStash::PluginManager::Error => e
     $stderr.puts(e.message)
     exit(1)

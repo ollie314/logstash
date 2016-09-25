@@ -19,29 +19,54 @@ namespace "test" do
     require 'ci/reporter/rake/rspec_loader'
   end
 
+  def core_specs
+    # note that regardless if which logstash-core-event-* gem is live, we will always run the
+    # logstash-core-event specs since currently this is the most complete Event and Timestamp specs
+    # which actually defines the Event contract and should pass regardless of the actuall underlying
+    # implementation.
+    specs = ["spec/unit/**/*_spec.rb", "logstash-core/spec/**/*_spec.rb", "logstash-core-event/spec/**/*_spec.rb"]
+
+    # figure if the logstash-core-event-java gem is loaded and if so add its specific specs in the core specs to run
+    begin
+      require "logstash-core-event-java/version"
+      specs << "logstash-core-event-java/spec/**/*_spec.rb"
+    rescue LoadError
+      # logstash-core-event-java gem is not live, ignore and skip specs
+    end
+
+    Rake::FileList[*specs]
+  end
+
   desc "run core specs"
   task "core" => ["setup"] do
-    exit(RSpec::Core::Runner.run([Rake::FileList["spec/**/*_spec.rb"]]))
+    exit(RSpec::Core::Runner.run([core_specs]))
   end
 
   desc "run core specs in fail-fast mode"
   task "core-fail-fast" => ["setup"] do
-    exit(Spec::Core::Runner.run(["--fail-fast", Rake::FileList["spec/**/*_spec.rb"]]))
+    exit(RSpec::Core::Runner.run(["--fail-fast", core_specs]))
   end
 
   desc "run core specs on a single file"
-  task "core-single-file", [:specfile] => ["setup"] do |t,args|
+  task "core-single-file", [:specfile] => ["setup"] do |t, args|
     exit(RSpec::Core::Runner.run([Rake::FileList[args.specfile]]))
   end
 
   desc "run all installed plugins specs"
   task "plugins" => ["setup"] do
+    plugins_to_exclude = ENV.fetch("EXCLUDE_PLUGIN", "").split(",")
     # grab all spec files using the live plugins gem specs. this allows correclty also running the specs
     # of a local plugin dir added using the Gemfile :path option. before this, any local plugin spec would
     # not be run because they were not under the vendor/bundle/jruby/1.9/gems path
     test_files = LogStash::PluginManager.find_plugins_gem_specs.map do |spec|
-      Rake::FileList[File.join(spec.gem_dir, "spec/{input,filter,codec,output}s/*_spec.rb")]
-    end.flatten
+      if plugins_to_exclude.size > 0
+        if !plugins_to_exclude.include?(Pathname.new(spec.gem_dir).basename.to_s)
+          Rake::FileList[File.join(spec.gem_dir, "spec/{input,filter,codec,output}s/*_spec.rb")]
+        end
+      else
+        Rake::FileList[File.join(spec.gem_dir, "spec/{input,filter,codec,output}s/*_spec.rb")]
+      end
+    end.flatten.compact
 
     # "--format=documentation"
     exit(RSpec::Core::Runner.run(["--order", "rand", test_files]))
@@ -79,7 +104,6 @@ namespace "test" do
     end
     task.reenable
   end
-
 end
 
 task "test" => [ "test:core" ]

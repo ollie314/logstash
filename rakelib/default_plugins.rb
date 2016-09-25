@@ -4,7 +4,6 @@ module LogStash
     # plugins included by default in the logstash distribution
     DEFAULT_PLUGINS = %w(
       logstash-input-heartbeat
-      logstash-output-zeromq
       logstash-codec-collectd
       logstash-output-xmpp
       logstash-codec-dots
@@ -19,11 +18,8 @@ module LogStash
       logstash-codec-msgpack
       logstash-codec-multiline
       logstash-codec-netflow
-      logstash-codec-oldlogstashjson
       logstash-codec-plain
       logstash-codec-rubydebug
-      logstash-filter-anonymize
-      logstash-filter-checksum
       logstash-filter-clone
       logstash-filter-csv
       logstash-filter-date
@@ -35,7 +31,6 @@ module LogStash
       logstash-filter-json
       logstash-filter-kv
       logstash-filter-metrics
-      logstash-filter-multiline
       logstash-filter-mutate
       logstash-filter-ruby
       logstash-filter-sleep
@@ -48,7 +43,6 @@ module LogStash
       logstash-filter-xml
       logstash-input-couchdb_changes
       logstash-input-elasticsearch
-      logstash-input-eventlog
       logstash-input-exec
       logstash-input-file
       logstash-input-ganglia
@@ -56,8 +50,10 @@ module LogStash
       logstash-input-generator
       logstash-input-graphite
       logstash-input-http
+      logstash-input-http_poller
       logstash-input-imap
       logstash-input-irc
+      logstash-input-jdbc
       logstash-input-log4j
       logstash-input-lumberjack
       logstash-input-pipe
@@ -73,27 +69,18 @@ module LogStash
       logstash-input-udp
       logstash-input-unix
       logstash-input-xmpp
-      logstash-input-zeromq
       logstash-input-kafka
       logstash-input-beats
       logstash-output-cloudwatch
       logstash-output-csv
       logstash-output-elasticsearch
-      logstash-output-email
-      logstash-output-exec
       logstash-output-file
-      logstash-output-ganglia
-      logstash-output-gelf
       logstash-output-graphite
-      logstash-output-hipchat
       logstash-output-http
       logstash-output-irc
-      logstash-output-juggernaut
-      logstash-output-lumberjack
+      logstash-output-kafka
       logstash-output-nagios
-      logstash-output-nagios_nsca
       logstash-output-null
-      logstash-output-opentsdb
       logstash-output-pagerduty
       logstash-output-pipe
       logstash-output-rabbitmq
@@ -105,7 +92,7 @@ module LogStash
       logstash-output-stdout
       logstash-output-tcp
       logstash-output-udp
-      logstash-output-kafka
+      logstash-output-webhdfs
     )
 
     # plugins required to run the logstash core specs
@@ -129,7 +116,6 @@ module LogStash
 
     ALL_PLUGINS_SKIP_LIST = Regexp.union([
       /^logstash-filter-yaml$/,
-      /jms$/,
       /example$/,
       /drupal/i,
       /^logstash-output-logentries$/,
@@ -142,7 +128,13 @@ module LogStash
       /^logstash-output-webhdfs$/,
       /^logstash-input-rackspace$/,
       /^logstash-output-rackspace$/,
-      /^logstash-input-dynamodb$/
+      /^logstash-input-dynamodb$/,
+      /^logstash-filter-language$/,
+      /^logstash-input-heroku$/,
+      /^logstash-output-google_cloud_storage$/,
+      /^logstash-input-journald$/,
+      /^logstash-input-log4j2$/,
+      /^logstash-codec-cloudtrail$/
     ])
 
 

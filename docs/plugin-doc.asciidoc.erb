@@ -3,7 +3,7 @@
 === <%= name %>
 
 <% unless default_plugin %>
-NOTE: This is a community-maintained plugin! It does not ship with Logstash by default, but it is easy to install by running `bin/plugin install logstash-<%= section %>-<%= plugin_name %>`.
+NOTE: This is a community-maintained plugin! It does not ship with Logstash by default, but it is easy to install by running `bin/logstash-plugin install logstash-<%= section %>-<%= plugin_name %>`.
 <% end %>
 
 <%= description %>
@@ -28,6 +28,7 @@ This plugin has no configuration options.
 
 <% sorted_attributes.each do |name, config| -%>
 <%
+     next if config[:obsolete]
      if name.is_a?(Regexp)
        name = "/" + name.to_s.gsub(/^\(\?-mix:/, "").gsub(/\)$/, "") + "/"
        is_regexp = true
